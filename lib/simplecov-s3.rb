@@ -4,6 +4,7 @@ require 'excon'
 require 'fog'
 require 'simplecov'
 require 'json'
+require 'codeclimate-test-reporter'
 
 module SimpleCov
   class S3
@@ -84,7 +85,8 @@ module SimpleCov
         merged = result.original_result.merge_resultset(merged)
       end
       result = SimpleCov::Result.new(merged)
-      push_coverage_to("#{@project_name}-#{Time.now.to_i}-coverageRESULT/#{SecureRandom.urlsafe_base64(33)}", gen_body(result), result.covered_percent, @postback_url)
+      CodeClimate::TestReporter::Formatter.new.format(result)
+      # push_coverage_to("#{@project_name}-#{Time.now.to_i}-coverageRESULT/#{SecureRandom.urlsafe_base64(33)}", gen_body(result), result.covered_percent, @postback_url)
       cleanup_files
     end
 
@@ -109,11 +111,11 @@ module SimpleCov
 
     def put_file(path, data)
       puts "Putting to #{path} data size #{data.size}"
-      @connection.directories.get(@bucket_name).files.create(:key => path, :body => data, :content_type => "text/html")
+      @connection.directories.get(@bucket_name).files.create(:key => "coverage/#{path}", :body => data, :content_type => "text/html")
     end
 
     def json_files
-      expected_dir = "#{@project_name}-#{commit_time}-coverageJSON/#{hashed_build_id}/"
+      expected_dir = "coverage/#{@project_name}-#{commit_time}-coverageJSON/#{hashed_build_id}/"
       @connection.directories.get(@bucket_name, :prefix => expected_dir).files
     end
 
@@ -149,14 +151,14 @@ module SimpleCov
       #check: @connection.directories.get(@bucket_name, prefix: "assets/0.7.1").files.size
       local_assets_are_in = SimpleCov::Formatter::HTMLFormatter.new.send(:asset_output_path)
       asset_dir_needed = local_assets_are_in.split("/").last
-      if @connection.directories.get(@bucket_name, prefix: "assets/#{asset_dir_needed}").files.size == 0
+      if @connection.directories.get(@bucket_name, prefix: "coverage/assets/#{asset_dir_needed}").files.size == 0
         puts "No assets directory on s3 found. Re-pushing!"
         Dir.glob("#{local_assets_are_in}/**/*").each do |file|
           unless File.directory?(file)
             path = "assets/#{asset_dir_needed}" + file[local_assets_are_in.size..-1]
             data = File.read(file)
             puts "pushing asset to #{path} sized #{data.size}"
-            @connection.directories.get(@bucket_name).files.create(:key => path, :body => data)
+            @connection.directories.get(@bucket_name).files.create(:key => "coverage/#{path}", :body => data)
           end
         end
         puts "asset push completed"
@@ -175,3 +177,4 @@ module SimpleCov
 
   end
 end
+
